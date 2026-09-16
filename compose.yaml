@@ -1,0 +1,57 @@
+services:
+  node:
+    build:
+      context: .
+      target: prod
+    volumes:
+      - db:/db
+      - files:/files
+    env_file:
+      - .env
+    secrets:
+      - email_key
+      - pepper
+    environment:
+      EMAIL_KEY_FILE: /run/secrets/email_key
+      PEPPER_FILE: /run/secrets/pepper
+    logging:
+      driver: local
+      options:
+        max-size: '20m'
+        max-file: '5'
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./front:/front:ro
+      - files:/files:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - node
+    env_file:
+      - .env
+    logging:
+      driver: local
+      options:
+        max-size: '20m'
+        max-file: '5'
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+  files:
+  db:
+
+secrets:
+  email_key:
+    file: ./secrets/email_key.txt
+  pepper:
+    file: ./secrets/pepper.txt

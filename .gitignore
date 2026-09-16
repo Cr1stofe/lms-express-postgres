@@ -1,0 +1,10 @@
+node_modules/
+.DS_Store
+.env
+secrets/*.txt
+!secrets/.gitkeep
+/files/
+/db/
+/*.sqlite
+*.sqlite-shm
+*.sqlite-wal

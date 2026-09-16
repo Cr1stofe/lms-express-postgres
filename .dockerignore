@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.dockerignore
+.env
+.env.*
+secrets/*.txt
+!secrets/.gitkeep
+db
+files
+seed/db/*.sqlite-shm
+seed/db/*.sqlite-wal
+.DS_Store
+*.md

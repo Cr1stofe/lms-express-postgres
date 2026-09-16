@@ -1,0 +1,94 @@
+{
+	email {$ACME_EMAIL}
+}
+{$SERVER_NAME} {
+	encode zstd gzip
+
+	@api path /api/*
+	@notAPI not path /api/*
+
+	header {
+		# Força HTTPS por 180 dias e inclui subdomínios.
+		Strict-Transport-Security "max-age=15552000; includeSubDomains"
+		# no-referrer: nunca envia o Referer.
+		Referrer-Policy "no-referrer"
+		# Respeita Content-Type.
+		X-Content-Type-Options "nosniff"
+		# Remove banners de servidor/framework.
+		-Server
+		-X-Powered-By
+		-Via
+	}
+
+	header @notAPI {
+		# https://helmetjs.github.io/#reference
+		# https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+
+		# Restringe origens/recursos.
+		# Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; form-action 'self'; upgrade-insecure-requests;"
+		Content-Security-Policy "base-uri 'self'; frame-ancestors 'self'; object-src 'none'; form-action 'self'; upgrade-insecure-requests;"
+		# Isola a página de janelas cross-origin.
+		Cross-Origin-Opener-Policy "same-origin"
+		# Exige CORS/CORP para embutir recursos
+		Cross-Origin-Embedder-Policy "require-corp"
+		# Bloqueia carregamento cross-origin sem CORS.
+		Cross-Origin-Resource-Policy "same-origin"
+		# OAC: usa cluster de agente por origem (mais isolamento).
+		Origin-Agent-Cluster "?1"
+		# Desativa prefetch.
+		X-DNS-Prefetch-Control "off"
+		# Remove a opção "Open" no diálogo de download.
+		X-Download-Options "noopen"
+		# Proibe o site em um frame.
+		X-Frame-Options "deny"
+		# Bloqueia políticas cross-domain.
+		X-Permitted-Cross-Domain-Policies "none"
+		# Desativa filtro XSS legado do navegador.
+		X-XSS-Protection "0"
+		# Desabilita APIs sensíveis por padrão.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=(), payment=()"
+	}
+
+	header @api {
+		# Access-Control-Allow-Origin {header.Origin}
+		Access-Control-Allow-Origin http://front.localhost
+		Access-Control-Allow-Methods "GET,POST,PUT,DELETE,OPTIONS"
+		Access-Control-Allow-Headers "Content-Type, Authorization"
+		Access-Control-Allow-Credentials true
+		Access-Control-Max-Age 600
+		Vary "Origin"
+	}
+
+	@preflight {
+		method OPTIONS
+		path /api/*
+	}
+	handle @preflight {
+		respond 204
+	}
+
+	handle_path /api/* {
+		reverse_proxy node:3000
+	}
+	handle_path /files/public/* {
+		root * /files/public
+		file_server
+	}
+
+	handle /files/private/* {
+		reverse_proxy node:3000 {
+			@accel header X-Accel-Redirect *
+			handle_response @accel {
+				root * /files/private
+				rewrite * {rp.header.X-Accel-Redirect}
+				file_server
+			}
+		}
+	}
+
+	route {
+		root * /front
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+}

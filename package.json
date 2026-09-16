@@ -1,0 +1,21 @@
+{
+  "name": "lms",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "node --watch index.ts",
+    "start": "node index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "jspdf": "^3.0.3"
+  }
+}
