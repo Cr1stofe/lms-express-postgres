@@ -1,7 +1,13 @@
 import { Router, type Request, type Response } from 'express';
 import { prisma } from '../../core/prisma.ts';
 import { RouteError } from '../../core/utils/route-error.ts';
-import { v } from '../../core/utils/validate.ts';
+import {
+  registerUserSchema,
+  loginSchema,
+  updatePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from '../../core/utils/validate.ts';
 import { Password } from './utils/password.ts';
 import { PEPPER, EMAIL_KEY } from '../../env.ts';
 import { Mail } from '../../core/mail/mail.ts';
@@ -23,12 +29,7 @@ const mail = new Mail(EMAIL_KEY);
 // POST /auth/user - Cadastro de Usuário
 authRouter.post('/user', async (req: Request, res: Response, next) => {
   try {
-    const { name, username, email, password } = {
-      name: v.string(req.body?.name),
-      username: v.string(req.body?.username),
-      email: v.email(req.body?.email),
-      password: v.password(req.body?.password),
-    };
+    const { name, username, email, password } = registerUserSchema.parse(req.body);
 
     const existingUser = await prisma.user.findFirst({
       where: {
@@ -70,10 +71,7 @@ authRouter.post('/user', async (req: Request, res: Response, next) => {
 // POST /auth/login - Login
 authRouter.post('/login', async (req: Request, res: Response, next) => {
   try {
-    const { email, password } = {
-      email: v.email(req.body?.email),
-      password: v.password(req.body?.password),
-    };
+    const { email, password } = loginSchema.parse(req.body);
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -136,10 +134,7 @@ authRouter.put(
   authMiddleware.guard('user'),
   async (req: Request, res: Response, next) => {
     try {
-      const { password, new_password } = {
-        password: v.password(req.body?.password),
-        new_password: v.password(req.body?.new_password),
-      };
+      const { password, new_password } = updatePasswordSchema.parse(req.body);
 
       const user = await prisma.user.findUnique({
         where: { id: req.session!.user_id },
@@ -183,9 +178,7 @@ authRouter.put(
 // POST /auth/password/forgot - Esqueci minha Senha
 authRouter.post('/password/forgot', async (req: Request, res: Response, next) => {
   try {
-    const { email } = {
-      email: v.email(req.body?.email),
-    };
+    const { email } = forgotPasswordSchema.parse(req.body);
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -241,10 +234,7 @@ authRouter.post('/password/forgot', async (req: Request, res: Response, next) =>
 // POST /auth/password/reset - Redefinir Senha com Token
 authRouter.post('/password/reset', async (req: Request, res: Response, next) => {
   try {
-    const { token, new_password } = {
-      token: v.string(req.body?.token),
-      new_password: v.password(req.body?.new_password),
-    };
+    const { token, new_password } = resetPasswordSchema.parse(req.body);
 
     const reset = await sessionService.validateToken(token);
     if (!reset) {

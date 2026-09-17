@@ -1,85 +1,109 @@
+import { z, ZodError } from 'zod';
 import { RouteError } from './route-error.ts';
 
-function string(x: unknown) {
-  if (typeof x !== 'string') return undefined;
-  const s = x.trim();
-  if (s.length === 0) return undefined;
-  return s;
-}
+// Schemas Base Reutilizáveis no Zod v4
+export const emailSchema = z
+  .email('email inválido')
+  .trim()
+  .min(1, 'email obrigatório')
+  .toLowerCase();
 
-function number(x: unknown) {
-  if (typeof x === 'number') {
-    return Number.isFinite(x) ? x : undefined;
+export const passwordSchema = z
+  .string()
+  .min(10, 'a senha deve ter no mínimo 10 caracteres')
+  .max(256, 'a senha deve ter no máximo 256 caracteres')
+  .regex(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+    'a senha deve conter letras maiúsculas, minúsculas e números',
+  );
+
+export const filenameSchema = z
+  .string()
+  .trim()
+  .min(1, 'nome de arquivo obrigatório')
+  .regex(/^(?!\.)[A-Za-z0-9._-]+$/, 'nome de arquivo inválido');
+
+export const slugSchema = z
+  .string()
+  .trim()
+  .min(1, 'slug obrigatório')
+  .regex(/^[a-z0-9-_]+$/, 'slug inválido');
+
+// Schemas do Módulo Auth
+export const registerUserSchema = z.object({
+  name: z.string().trim().min(1, 'nome obrigatório'),
+  username: z.string().trim().min(1, 'username obrigatório'),
+  email: emailSchema,
+  password: passwordSchema,
+});
+
+export const loginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, 'senha obrigatória'),
+});
+
+export const updatePasswordSchema = z.object({
+  password: z.string().min(1, 'senha atual obrigatória'),
+  new_password: passwordSchema,
+});
+
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1, 'token obrigatório'),
+  new_password: passwordSchema,
+});
+
+// Schemas do Módulo LMS
+export const courseUpsertSchema = z.object({
+  slug: slugSchema,
+  title: z.string().trim().min(1, 'título obrigatório'),
+  description: z.string().trim().min(1, 'descrição obrigatória'),
+  lessons: z.coerce.number().int().min(1, 'total de aulas deve ser maior que 0'),
+  hours: z.coerce.number().int().min(1, 'carga horária deve ser maior que 0'),
+});
+
+export const lessonUpsertSchema = z.object({
+  courseSlug: slugSchema,
+  slug: slugSchema,
+  title: z.string().trim().min(1, 'título obrigatório'),
+  description: z.string().trim().min(1, 'descrição obrigatória'),
+  video: z.string().trim().min(1, 'vídeo obrigatório'),
+  seconds: z.coerce.number().int().nonnegative('segundos inválidos'),
+  order: z.coerce.number().int().positive('ordem deve ser maior que 0'),
+  free: z.coerce.number().int().min(0).max(1).default(0),
+});
+
+export const completeLessonSchema = z.object({
+  courseId: z.coerce.number().int().positive('courseId inválido'),
+  lessonId: z.coerce.number().int().positive('lessonId inválido'),
+});
+
+export const resetCourseSchema = z.object({
+  courseId: z.coerce.number().int().positive('courseId inválido'),
+});
+
+// Helper de parsing seguro que traduz ZodError para RouteError(422)
+export function parseSchema<T>(schema: z.ZodType<T>, data: unknown): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const firstIssue = result.error.issues[0];
+    throw new RouteError(422, firstIssue?.message || 'dados inválidos');
   }
-  if (typeof x === 'string' && x.trim().length !== 0) {
-    const n = Number(x);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
+  return result.data;
 }
 
-function boolean(x: unknown) {
-  if (x === true || x === 'true' || x === 1 || x === '1' || x === 'on')
-    return true;
-  if (x === false || x === 'false' || x === 0 || x === '0' || x === 'off')
-    return false;
-  return undefined;
-}
-
-function object(x: unknown): Record<string, unknown> | undefined {
-  return typeof x === 'object' && x !== null && !Array.isArray(x)
-    ? (x as Record<string, unknown>)
-    : undefined;
-}
-
-const email_re = /^[^@]+@[^@]+\.[^@]+$/;
-
-function email(x: unknown) {
-  const s = string(x)?.toLowerCase();
-  if (s === undefined) return undefined;
-  return email_re.test(s) ? s : undefined;
-}
-
-const password_re = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
-
-function password(x: unknown) {
-  if (typeof x !== 'string') return undefined;
-  if (x.length < 10 || x.length > 256) return undefined;
-  return password_re.test(x) ? x : undefined;
-}
-
-const file_re = /^(?!\.)[A-Za-z0-9._-]+$/;
-
-function file(x: unknown) {
-  if (typeof x !== 'string') return undefined;
-  return file_re.test(x) ? x : undefined;
-}
-
-type Parse<Value> = (x: unknown) => Value | undefined;
-
-function required<Value>(fn: Parse<Value>, error: string) {
-  return (x: unknown) => {
-    const value = fn(x);
-    if (value === undefined) throw new RouteError(422, error);
-    return value;
-  };
-}
-
+// Objeto 'v' utilitário baseado em Zod v4 para compatibilidade e conveniência
 export const v = {
-  string: required(string, 'string esperada'),
-  number: required(number, 'número esperado'),
-  boolean: required(boolean, 'boolean esperada'),
-  object: required(object, 'objeto esperado'),
-  email: required(email, 'email inválido'),
-  password: required(password, 'password inválido'),
-  file: required(file, 'nome de arquivo inválido'),
-  o: {
-    string,
-    number,
-    boolean,
-    object,
-    email,
-    password,
-    file,
-  },
+  string: (x: unknown) => parseSchema(z.string().trim().min(1, 'string esperada'), x),
+  number: (x: unknown) => parseSchema(z.coerce.number(), x),
+  boolean: (x: unknown) => parseSchema(z.coerce.boolean(), x),
+  email: (x: unknown) => parseSchema(emailSchema, x),
+  password: (x: unknown) => parseSchema(passwordSchema, x),
+  file: (x: unknown) => parseSchema(filenameSchema, x),
+  slug: (x: unknown) => parseSchema(slugSchema, x),
 };
+
+export { z, ZodError };
