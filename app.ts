@@ -4,6 +4,7 @@ import cors from 'cors';
 import { authRouter } from './api/auth/routes.ts';
 import { lmsRouter } from './api/lms/routes.ts';
 import { filesRouter } from './api/files/routes.ts';
+import { logger } from './core/middleware/logger.ts';
 import { errorHandler } from './core/middleware/error-handler.ts';
 import { RouteError } from './core/utils/route-error.ts';
 
@@ -14,15 +15,8 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
 
-// Logger simples de requisições
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
-  });
-  next();
-});
+// Logger de requisições HTTP
+app.use(logger);
 
 // Suporte a rotas com e sem prefixo /api (para compatibilidade com front e Caddy)
 app.use('/auth', authRouter);
