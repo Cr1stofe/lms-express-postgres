@@ -1,0 +1,128 @@
+// Prisma Schema para o LMS (Learning Management System)
+// PostgreSQL com Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER   @map("user")
+  EDITOR @map("editor")
+  ADMIN  @map("admin")
+
+  @@map("role")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  username     String   @unique
+  email        String   @unique
+  role         Role     @default(USER)
+  passwordHash String   @map("password_hash")
+  created      DateTime @default(now())
+  updated      DateTime @default(now()) @updatedAt
+
+  sessions         Session[]
+  resets           PasswordReset[]
+  lessonsCompleted LessonCompleted[]
+  certificates     Certificate[]
+
+  @@map("users")
+}
+
+model Session {
+  sidHash Bytes    @id @map("sid_hash")
+  userId  Int      @map("user_id")
+  created DateTime @default(now())
+  expires DateTime
+  ip      String?
+  ua      String?
+  revoked Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_session_user")
+  @@map("sessions")
+}
+
+model PasswordReset {
+  tokenHash Bytes    @id @map("token_hash")
+  userId    Int      @map("user_id")
+  created   DateTime @default(now())
+  expires   DateTime
+  ip        String?
+  ua        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_reset_user")
+  @@map("resets")
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  title       String
+  description String
+  lessons     Int      @default(0)
+  hours       Int      @default(0)
+  created     DateTime @default(now())
+
+  lessonsList      Lesson[]
+  lessonsCompleted LessonCompleted[]
+  certificates     Certificate[]
+
+  @@map("courses")
+}
+
+model Lesson {
+  id          Int      @id @default(autoincrement())
+  courseId    Int      @map("course_id")
+  slug        String
+  title       String
+  seconds     Int      @default(0)
+  video       String
+  description String
+  order       Int
+  free        Boolean  @default(false)
+  created     DateTime @default(now())
+
+  course           Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessonsCompleted LessonCompleted[]
+
+  @@unique([courseId, slug])
+  @@index([courseId, order], map: "idx_lessons_order")
+  @@map("lessons")
+}
+
+model LessonCompleted {
+  userId    Int      @map("user_id")
+  courseId  Int      @map("course_id")
+  lessonId  Int      @map("lesson_id")
+  completed DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@id([userId, courseId, lessonId])
+  @@map("lessons_completed")
+}
+
+model Certificate {
+  id        String   @id @default(uuid())
+  userId    Int      @map("user_id")
+  courseId  Int      @map("course_id")
+  completed DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("certificates")
+}

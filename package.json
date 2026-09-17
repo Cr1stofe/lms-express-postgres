@@ -13,9 +13,18 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^24.13.5",
+    "@types/pg": "^8.23.1",
+    "prisma": "^7.10.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "jspdf": "^3.0.3"
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "dotenv": "^17.4.2",
+    "jspdf": "^3.0.3",
+    "pg": "^8.23.0"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
   }
 }

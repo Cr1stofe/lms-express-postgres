@@ -8,3 +8,5 @@ secrets/*.txt
 /*.sqlite
 *.sqlite-shm
 *.sqlite-wal
+/generated/prisma
+MIGRACAO_FASE_2.md
