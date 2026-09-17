@@ -1,13 +1,13 @@
-import { type Middleware } from '../router.ts';
+import type { Request, Response, NextFunction } from 'express';
 import { RouteError } from '../utils/route-error.ts';
 
-type Request = {
+type RateLimitRecord = {
   hits: number;
   reset: number;
 };
 
-export const rateLimit = (time: number, max: number): Middleware => {
-  const requests = new Map<string, Request>();
+export const rateLimit = (timeMs: number, max: number) => {
+  const requests = new Map<string, RateLimitRecord>();
 
   setInterval(() => {
     const now = Date.now();
@@ -16,30 +16,32 @@ export const rateLimit = (time: number, max: number): Middleware => {
     }
   }, 30 * 60 * 1000).unref();
 
-  return (req, res) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
-    const key = req.ip;
-    let request = requests.get(key);
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    let record = requests.get(key);
 
-    if (request === undefined || now >= request.reset) {
-      request = {
+    if (record === undefined || now >= record.reset) {
+      record = {
         hits: 0,
-        reset: now + time,
+        reset: now + timeMs,
       };
-      requests.set(key, request);
+      requests.set(key, record);
     }
 
-    request.hits += 1;
+    record.hits += 1;
 
-    const sLeft = Math.ceil((request.reset - now) / 1000);
-    const rLeft = Math.max(0, max - request.hits);
-    const sTime = Math.ceil(time / 1000);
+    const sLeft = Math.ceil((record.reset - now) / 1000);
+    const rLeft = Math.max(0, max - record.hits);
+    const sTime = Math.ceil(timeMs / 1000);
     res.setHeader('RateLimit', `"default";r=${rLeft};t=${sLeft}`);
     res.setHeader('RateLimit-Policy', `"default";q=${max};w=${sTime}`);
 
-    if (request.hits > max) {
+    if (record.hits > max) {
       res.setHeader('Retry-After', `${sLeft}`);
-      throw new RouteError(429, 'rate-limit');
+      return next(new RouteError(429, 'rate-limit'));
     }
+
+    next();
   };
 };

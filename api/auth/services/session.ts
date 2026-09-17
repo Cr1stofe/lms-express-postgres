@@ -1,92 +1,128 @@
-import { CoreProvider } from '../../../core/utils/abstract.ts';
-import { AuthQuery } from '../query.ts';
+import { prisma } from '../../../core/prisma.ts';
 import { randomBytesAsync, sha256 } from '../utils/utils.ts';
+import type { Response } from 'express';
 
-const ttlSec = 60 * 60 * 24 * 15;
-const ttlSec5days = 60 * 60 * 24 * 5;
+const ttlSec = 60 * 60 * 24 * 15; // 15 dias
+const ttlSec5days = 60 * 60 * 24 * 5; // 5 dias
 
 export const COOKIE_SID_KEY = '__Secure-sid';
 
-function sidCookie(sid: string, expires: number) {
-  return `${COOKIE_SID_KEY}=${sid}; Path=/; Max-Age=${expires}; HttpOnly; Secure; SameSite=Lax`;
+export type UserRole = 'admin' | 'editor' | 'user';
+
+export function setSessionCookie(res: Response, sid: string, maxAgeSec: number) {
+  res.cookie(COOKIE_SID_KEY, sid, {
+    maxAge: maxAgeSec * 1000,
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+  });
 }
 
-export class SessionService extends CoreProvider {
-  query = new AuthQuery(this.db);
+export function clearSessionCookie(res: Response) {
+  res.clearCookie(COOKIE_SID_KEY, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+}
 
+export class SessionService {
   async create({ userId, ip, ua }: { userId: number; ip: string; ua: string }) {
     const sid = (await randomBytesAsync(32)).toString('base64url');
     const sid_hash = sha256(sid);
-    const expires_ms = Date.now() + ttlSec * 1000;
+    const expiresDate = new Date(Date.now() + ttlSec * 1000);
 
-    this.query.insertSession({ sid_hash, expires_ms, user_id: userId, ip, ua });
+    await prisma.session.create({
+      data: {
+        sidHash: sid_hash,
+        userId,
+        expires: expiresDate,
+        ip,
+        ua,
+      },
+    });
 
-    const cookie = sidCookie(sid, ttlSec);
-
-    return { cookie };
+    return { sid, maxAgeSec: ttlSec };
   }
 
-  validate(sid: string) {
-    const now = Date.now();
+  async validate(sid: string) {
+    const now = new Date();
     const sid_hash = sha256(sid);
-    const session = this.query.selectSession(sid_hash);
 
-    if (!session || session.revoked === 1) {
-      return {
-        valid: false,
-        cookie: sidCookie('', 0),
-      };
+    const session = await prisma.session.findUnique({
+      where: { sidHash: sid_hash },
+      include: {
+        user: {
+          select: { role: true },
+        },
+      },
+    });
+
+    if (!session || session.revoked) {
+      return { valid: false as const };
     }
 
-    let expires_ms = session.expires_ms;
+    let expiresDate = session.expires;
 
-    if (now >= expires_ms) {
-      this.query.revokeSession(sid_hash);
-      return {
-        valid: false,
-        cookie: sidCookie('', 0),
-      };
+    if (now >= expiresDate) {
+      await prisma.session.update({
+        where: { sidHash: sid_hash },
+        data: { revoked: true },
+      });
+      return { valid: false as const };
     }
 
-    if (now >= expires_ms - 1000 * ttlSec5days) {
-      const expires_msUpdate = now + 1000 * ttlSec;
-      this.query.updateSessionExpires(sid_hash, expires_msUpdate);
-      expires_ms = expires_msUpdate;
+    // Se faltar menos de 5 dias para expirar, estende por mais 15 dias
+    if (now.getTime() >= expiresDate.getTime() - ttlSec5days * 1000) {
+      const newExpires = new Date(Date.now() + ttlSec * 1000);
+      await prisma.session.update({
+        where: { sidHash: sid_hash },
+        data: { expires: newExpires },
+      });
+      expiresDate = newExpires;
     }
 
-    const user = this.query.selectUserRole(session.user_id);
-    if (!user) {
-      this.query.revokeSession(sid_hash);
-      return {
-        valid: false,
-        cookie: sidCookie('', 0),
-      };
+    if (!session.user) {
+      await prisma.session.update({
+        where: { sidHash: sid_hash },
+        data: { revoked: true },
+      });
+      return { valid: false as const };
     }
+
+    const role = session.user.role.toLowerCase() as UserRole;
 
     return {
-      valid: true,
-      cookie: sidCookie(sid, Math.floor((expires_ms - now) / 1000)),
+      valid: true as const,
+      sid,
+      maxAgeSec: Math.floor((expiresDate.getTime() - now.getTime()) / 1000),
       session: {
-        user_id: session.user_id,
-        role: user.role,
-        expires_ms,
+        user_id: session.userId,
+        role,
+        expires_ms: expiresDate.getTime(),
       },
     };
   }
 
-  invalidate(sid: string | undefined) {
-    const cookie = sidCookie('', 0);
-    try {
-      if (sid) {
+  async invalidate(sid: string | undefined) {
+    if (sid) {
+      try {
         const sid_hash = sha256(sid);
-        this.query.revokeSession(sid_hash);
-      }
-    } catch {}
-    return { cookie };
+        await prisma.session.update({
+          where: { sidHash: sid_hash },
+          data: { revoked: true },
+        });
+      } catch {}
+    }
   }
 
-  invalidateAll(userId: number) {
-    this.query.revokeSessions(userId);
+  async invalidateAll(userId: number) {
+    await prisma.session.updateMany({
+      where: { userId },
+      data: { revoked: true },
+    });
   }
 
   async resetToken({
@@ -100,23 +136,38 @@ export class SessionService extends CoreProvider {
   }) {
     const token = (await randomBytesAsync(32)).toString('base64url');
     const token_hash = sha256(token);
-    const expires_ms = Date.now() + 1000 * 60 * 30;
-    this.query.insertReset({ token_hash, expires_ms, user_id: userId, ip, ua });
+    const expiresDate = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
+
+    await prisma.passwordReset.create({
+      data: {
+        tokenHash: token_hash,
+        userId,
+        expires: expiresDate,
+        ip,
+        ua,
+      },
+    });
+
     return { token };
   }
 
-  validateToken(token: string) {
-    const now = Date.now();
+  async validateToken(token: string) {
+    const now = new Date();
     const token_hash = sha256(token);
-    const reset = this.query.selectReset(token_hash);
-    if (!reset) {
+
+    const reset = await prisma.passwordReset.findUnique({
+      where: { tokenHash: token_hash },
+    });
+
+    if (!reset || now > reset.expires) {
       return null;
     }
-    if (now > reset.expires_ms) {
-      return null;
-    }
-    this.query.revokeSessions(reset.user_id);
-    this.query.deleteReset(reset.user_id);
-    return { user_id: reset.user_id };
+
+    await this.invalidateAll(reset.userId);
+    await prisma.passwordReset.delete({
+      where: { tokenHash: token_hash },
+    });
+
+    return { user_id: reset.userId };
   }
 }
