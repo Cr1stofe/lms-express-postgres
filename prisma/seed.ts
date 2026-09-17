@@ -1,9 +1,11 @@
 import { Role } from '@prisma/client';
 import { prisma } from '../core/prisma.ts';
+import { Password } from '../api/auth/utils/password.ts';
+import { PEPPER } from '../env.ts';
 
-// Hash padrão compatível com o crypto.ts do projeto (senha: "P@ssw0rd")
-const DEFAULT_PASSWORD_HASH =
-  'scrypt$v=1$norm=NFC$N=16384,r=8,p=1$e1ea876357986cdf1e2d0391d5e92dce$2718d7459d964ee18318a2cdba6acd69982cf2c5950a210a92936ed906941881';
+const pass = new Password(PEPPER);
+const DEFAULT_PASSWORD = 'P@ssw0rd123';
+const DEFAULT_PASSWORD_HASH = await pass.hash(DEFAULT_PASSWORD);
 
 const coursesData = [
   {
@@ -282,6 +284,7 @@ async function main() {
         name: userItem.name,
         username: userItem.username,
         role: userItem.role,
+        passwordHash: DEFAULT_PASSWORD_HASH,
       },
       create: {
         name: userItem.name,

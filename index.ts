@@ -1,35 +1,27 @@
-import { readFile } from 'node:fs/promises';
-import { AuthApi } from './api/auth/index.ts';
-import { LmsApi } from './api/lms/index.ts';
-import { Core } from './core/core.ts';
-import { logger } from './core/middleware/logger.ts';
-import { rateLimit } from './core/middleware/rate-limit.ts';
-import { FilesApi } from './api/files/index.ts';
+import { app } from './app.ts';
+import { prisma } from './core/prisma.ts';
 
-const core = new Core();
+const PORT = Number(process.env.PORT) || 3000;
 
-core.router.use([logger, rateLimit(10_000, 100)]);
-
-new AuthApi(core).init();
-new LmsApi(core).init();
-new FilesApi(core).init();
-
-core.init();
-
-// shutdown
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Servidor LMS rodando com Express e PostgreSQL na porta ${PORT}`);
+  console.log(`👉 http://localhost:${PORT}`);
+});
 
 function shutdown(signal: string) {
-  console.log(signal);
-  core.server.close(() => {
-    console.log('HTTP server closed.');
-    core.db.close();
+  console.log(`\nEncerrando servidor (${signal})...`);
+  server.close(async () => {
+    console.log('Servidor HTTP encerrado.');
+    await prisma.$disconnect();
+    console.log('Conexões do PostgreSQL encerradas com sucesso.');
     process.exit(0);
   });
-  core.server.closeAllConnections();
+
   setTimeout(() => {
-    process.exit(0);
-  }, 5_000).unref();
+    console.error('Forçando encerramento após timeout.');
+    process.exit(1);
+  }, 5000).unref();
 }
 
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));

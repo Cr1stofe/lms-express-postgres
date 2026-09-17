@@ -1,6 +1,14 @@
 import { jsPDF } from 'jspdf';
-import type { CertificateFullData } from '../query.ts';
 import { SERVER_NAME } from '../../../env.ts';
+
+export type CertificateFullData = {
+  id: string;
+  name: string;
+  title: string;
+  hours: number;
+  lessons: number;
+  completed: string;
+};
 
 export function generateCertificate(c: CertificateFullData) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
