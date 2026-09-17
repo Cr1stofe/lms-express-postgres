@@ -28,7 +28,8 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jspdf": "^3.0.3",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "zod": "^4.6.5"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"

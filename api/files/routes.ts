@@ -4,7 +4,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { rename, rm, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { v } from '../../core/utils/validate.ts';
+import { filenameSchema } from '../../core/utils/validate.ts';
 import { RouteError } from '../../core/utils/route-error.ts';
 import { AuthMiddleware } from '../auth/middleware/auth.ts';
 import { FILES_PATH } from '../../env.ts';
@@ -18,7 +18,7 @@ const MAX_BYTES = 150 * 1024 * 1024; // 150MB
 // GET /files/public/:name - Servir Arquivo Público com ETag & Streaming
 filesRouter.get('/public/:name', async (req: Request, res: Response, next) => {
   try {
-    const name = v.file(req.params.name);
+    const name = filenameSchema.parse(req.params.name);
     const filePath = path.join(FILES_PATH, 'public', name);
     const ext = path.extname(name);
 
@@ -57,7 +57,7 @@ filesRouter.get(
   auth.guard('user'),
   (req: Request, res: Response, next) => {
     try {
-      const name = v.file(req.params.name);
+      const name = filenameSchema.parse(req.params.name);
       res.setHeader('X-Accel-Redirect', name);
       res.status(200).end();
     } catch (err) {
@@ -85,39 +85,43 @@ filesRouter.post(
       return next(new RouteError(413, 'corpo grande'));
     }
 
-    const rawFilename = req.headers['x-filename'] as string;
-    const name = v.file(rawFilename);
-    const visibility =
-      req.headers['x-visibility'] === 'public' ? 'public' : 'private';
-
-    const now = Date.now();
-    const ext = path.extname(name);
-    const finalName = `${name.replace(ext, '')}-${now}${ext}`;
-    const tempPath = path.join(FILES_PATH, visibility, `${randomUUID()}.temp`);
-    const writePath = path.join(FILES_PATH, visibility, finalName);
-    const writeStream = createWriteStream(tempPath, { flags: 'wx' });
-
     try {
-      await pipeline(req, LimitBytes(MAX_BYTES), writeStream);
-      await rename(tempPath, writePath);
+      const rawFilename = req.headers['x-filename'] as string;
+      const name = filenameSchema.parse(rawFilename);
+      const visibility =
+        req.headers['x-visibility'] === 'public' ? 'public' : 'private';
 
-      if (ext === '.jpg' || ext === '.jpeg') {
-        try {
-          await cropImage(writePath, 320, 200);
-        } catch (cropErr) {
-          console.warn('Aviso: cropImage falhou ou libvips não disponível:', cropErr);
+      const now = Date.now();
+      const ext = path.extname(name);
+      const finalName = `${name.replace(ext, '')}-${now}${ext}`;
+      const tempPath = path.join(FILES_PATH, visibility, `${randomUUID()}.temp`);
+      const writePath = path.join(FILES_PATH, visibility, finalName);
+      const writeStream = createWriteStream(tempPath, { flags: 'wx' });
+
+      try {
+        await pipeline(req, LimitBytes(MAX_BYTES), writeStream);
+        await rename(tempPath, writePath);
+
+        if (ext === '.jpg' || ext === '.jpeg') {
+          try {
+            await cropImage(writePath, 320, 200);
+          } catch (cropErr) {
+            console.warn('Aviso: cropImage falhou ou libvips não disponível:', cropErr);
+          }
         }
-      }
 
-      res.status(201).json({ path: writePath, name: finalName });
-    } catch (err) {
-      if (err instanceof RouteError) {
-        next(err);
-      } else {
-        next(new RouteError(500, 'erro ao processar upload'));
+        res.status(201).json({ path: writePath, name: finalName });
+      } catch (err) {
+        if (err instanceof RouteError) {
+          next(err);
+        } else {
+          next(new RouteError(500, 'erro ao processar upload'));
+        }
+      } finally {
+        await rm(tempPath, { force: true }).catch(() => {});
       }
-    } finally {
-      await rm(tempPath, { force: true }).catch(() => {});
+    } catch (err) {
+      next(err);
     }
   },
 );

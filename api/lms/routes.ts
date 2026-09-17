@@ -1,7 +1,13 @@
 import { Router, type Request, type Response } from 'express';
 import { prisma } from '../../core/prisma.ts';
 import { RouteError } from '../../core/utils/route-error.ts';
-import { v } from '../../core/utils/validate.ts';
+import {
+  courseUpsertSchema,
+  lessonUpsertSchema,
+  completeLessonSchema,
+  resetCourseSchema,
+  slugSchema,
+} from '../../core/utils/validate.ts';
 import { AuthMiddleware } from '../auth/middleware/auth.ts';
 import { generateCertificate } from './utils/certificate.ts';
 
@@ -15,13 +21,7 @@ lmsRouter.post(
   auth.guard('admin'),
   async (req: Request, res: Response, next) => {
     try {
-      const { slug, title, description, lessons, hours } = {
-        slug: v.string(req.body?.slug),
-        title: v.string(req.body?.title),
-        description: v.string(req.body?.description),
-        lessons: v.number(req.body?.lessons),
-        hours: v.number(req.body?.hours),
-      };
+      const { slug, title, description, lessons, hours } = courseUpsertSchema.parse(req.body);
 
       const course = await prisma.course.upsert({
         where: { slug },
@@ -66,16 +66,7 @@ lmsRouter.post(
         description,
         order,
         free,
-      } = {
-        courseSlug: v.string(req.body?.courseSlug),
-        slug: v.string(req.body?.slug),
-        title: v.string(req.body?.title),
-        description: v.string(req.body?.description),
-        video: v.string(req.body?.video),
-        seconds: v.number(req.body?.seconds),
-        order: v.number(req.body?.order),
-        free: v.number(req.body?.free),
-      };
+      } = lessonUpsertSchema.parse(req.body);
 
       const course = await prisma.course.findUnique({
         where: { slug: courseSlug },
@@ -193,7 +184,7 @@ lmsRouter.get(
   auth.optional,
   async (req: Request, res: Response, next) => {
     try {
-      const slug = String(req.params.slug);
+      const slug = slugSchema.parse(req.params.slug);
 
       const course = await prisma.course.findUnique({
         where: { slug },
@@ -268,8 +259,8 @@ lmsRouter.get(
   auth.optional,
   async (req: Request, res: Response, next) => {
     try {
-      const courseSlug = String(req.params.courseSlug);
-      const lessonSlug = String(req.params.lessonSlug);
+      const courseSlug = slugSchema.parse(req.params.courseSlug);
+      const lessonSlug = slugSchema.parse(req.params.lessonSlug);
 
       const course = await prisma.course.findUnique({
         where: { slug: courseSlug },
@@ -341,10 +332,7 @@ lmsRouter.post(
   auth.guard('user'),
   async (req: Request, res: Response, next) => {
     try {
-      const { courseId, lessonId } = {
-        courseId: v.number(req.body?.courseId),
-        lessonId: v.number(req.body?.lessonId),
-      };
+      const { courseId, lessonId } = completeLessonSchema.parse(req.body);
 
       const userId = req.session!.user_id;
 
@@ -420,9 +408,7 @@ lmsRouter.delete(
   auth.guard('user'),
   async (req: Request, res: Response, next) => {
     try {
-      const { courseId } = {
-        courseId: v.number(req.body?.courseId),
-      };
+      const { courseId } = resetCourseSchema.parse(req.body);
 
       const userId = req.session!.user_id;
 
