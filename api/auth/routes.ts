@@ -18,6 +18,7 @@ import {
   clearSessionCookie,
 } from './services/session.ts';
 import { AuthMiddleware } from './middleware/auth.ts';
+import { rateLimit } from '../../core/middleware/rate-limit.ts';
 
 export const authRouter = Router();
 
@@ -26,8 +27,11 @@ const sessionService = new SessionService();
 const authMiddleware = new AuthMiddleware();
 const mail = new Mail(EMAIL_KEY);
 
-// POST /auth/user - Cadastro de Usuário
-authRouter.post('/user', async (req: Request, res: Response, next) => {
+const authLimiter = rateLimit(60 * 1000, 10);
+const forgotLimiter = rateLimit(15 * 60 * 1000, 5);
+
+// POST /auth/user - Cadastro de Usuário (com Rate Limit)
+authRouter.post('/user', authLimiter, async (req: Request, res: Response, next) => {
   try {
     const { name, username, email, password } = registerUserSchema.parse(req.body);
 
@@ -68,8 +72,8 @@ authRouter.post('/user', async (req: Request, res: Response, next) => {
   }
 });
 
-// POST /auth/login - Login
-authRouter.post('/login', async (req: Request, res: Response, next) => {
+// POST /auth/login - Login (com Rate Limit)
+authRouter.post('/login', authLimiter, async (req: Request, res: Response, next) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
@@ -175,37 +179,40 @@ authRouter.put(
   },
 );
 
-// POST /auth/password/forgot - Esqueci minha Senha
-authRouter.post('/password/forgot', async (req: Request, res: Response, next) => {
-  try {
-    const { email } = forgotPasswordSchema.parse(req.body);
+// POST /auth/password/forgot - Esqueci minha Senha (com Rate Limit)
+authRouter.post(
+  '/password/forgot',
+  forgotLimiter,
+  async (req: Request, res: Response, next) => {
+    try {
+      const { email } = forgotPasswordSchema.parse(req.body);
 
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-    });
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+      });
 
-    if (!user) {
-      return res.status(200).json({ title: 'verifique seu email' });
-    }
+      if (!user) {
+        return res.status(200).json({ title: 'verifique seu email' });
+      }
 
-    const ip = req.ip || req.socket.remoteAddress || '';
-    const ua = req.headers['user-agent'] ?? '';
+      const ip = req.ip || req.socket.remoteAddress || '';
+      const ua = req.headers['user-agent'] ?? '';
 
-    const { token } = await sessionService.resetToken({
-      userId: user.id,
-      ip,
-      ua,
-    });
+      const { token } = await sessionService.resetToken({
+        userId: user.id,
+        ip,
+        ua,
+      });
 
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const baseUrl = `${protocol}://${host}`;
-    const resetLink = `${baseUrl}/#/resetar/?token=${token}`;
+      const protocol = req.protocol;
+      const host = req.get('host');
+      const baseUrl = `${protocol}://${host}`;
+      const resetLink = `${baseUrl}/#/resetar/?token=${token}`;
 
-    const mailContent = {
-      to: user.email,
-      subject: 'Resetar Senha',
-      body: /*html*/ `
+      const mailContent = {
+        to: user.email,
+        subject: 'Resetar Senha',
+        body: /*html*/ `
       <h1 style="font-size: 1.25rem; font-family: sans-serif;">
         Olá, ${user.name || user.email}
       </h1>
@@ -218,18 +225,19 @@ authRouter.post('/password/forgot', async (req: Request, res: Response, next) =>
       <p style="color: #555; margin-top: 2rem; font-family: sans-serif;">
         Se você não solicitou a redefinição, ignore este e-mail.
       </p>`,
-    };
+      };
 
-    const { ok } = await mail.send(mailContent);
-    if (!ok) {
-      throw new RouteError(400, 'erro ao enviar email');
+      const { ok } = await mail.send(mailContent);
+      if (!ok) {
+        throw new RouteError(400, 'erro ao enviar email');
+      }
+
+      res.status(200).json({ title: 'verifique seu email' });
+    } catch (err) {
+      next(err);
     }
-
-    res.status(200).json({ title: 'verifique seu email' });
-  } catch (err) {
-    next(err);
-  }
-});
+  },
+);
 
 // POST /auth/password/reset - Redefinir Senha com Token
 authRouter.post('/password/reset', async (req: Request, res: Response, next) => {
