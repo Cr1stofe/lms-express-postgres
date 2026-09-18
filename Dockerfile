@@ -1,6 +1,6 @@
 FROM node:24-alpine AS base
 WORKDIR /app
-RUN apk --no-cache add vips-tools && mkdir -p /files/public /files/private /db
+RUN apk --no-cache add vips-tools && mkdir -p /files/public /files/private
 COPY seed/files /files/
 
 FROM base AS prod

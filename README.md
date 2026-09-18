@@ -124,7 +124,11 @@ PORT=3000
 FROM_EMAIL=noreply@seudominio.com
 
 # Armazenamento de Arquivos
-FILES_PATH=/Volumes/D/Projetos/backend/nodejs/lms-express-postgres/files
+# No Docker Compose (volume nomeado montado em /files):
+FILES_PATH=/files
+
+# Para desenvolvimento LOCAL na máquina host (fora do Docker):
+# FILES_PATH=./files
 
 # Banco de Dados (PostgreSQL)
 POSTGRES_USER=postgres
