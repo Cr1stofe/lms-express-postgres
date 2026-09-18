@@ -259,16 +259,3 @@ npx vitest run --coverage
 | `GET` | `/files/private/:name` | Acessa arquivos restritos (`X-Accel-Redirect`) | Aluno autenticado |
 | `POST` | `/files/upload` | Upload binário (`octet-stream`) com corte `libvips` | Administrador (`ADMIN`) |
 
----
-
-## 🛠️ Comandos Úteis do Dia a Dia
-
-| Comando | O que faz? |
-| :--- | :--- |
-| `npm test` | Executa os 30 testes automatizados de integração |
-| `npx vitest run --coverage` | Gera a tabela de cobertura detalhada por arquivo/módulo |
-| `npx prisma studio` | Abre a interface visual de administração do banco (`http://localhost:5555`) |
-| `npx prisma migrate dev` | Gera e aplica uma nova migration no banco de dados local |
-| `npx prisma db seed` | Semeia dados iniciais de cursos, aulas e usuários |
-| `docker compose ps` | Verifica a saúde e o status de todos os containers |
-| `npm run dev` | Inicia o servidor Express em modo desenvolvimento |
