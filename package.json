@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node --watch index.ts",
     "start": "node index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -17,8 +18,12 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.5",
     "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^5.0.1",
     "prisma": "^7.10.0",
-    "typescript": "^7.0.2"
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
