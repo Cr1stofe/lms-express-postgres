@@ -1,16 +1,16 @@
 FROM node:24-alpine AS base
 WORKDIR /app
-RUN apk --no-cache add vips-tools sqlite && mkdir -p /files/public /files/private /db
+RUN apk --no-cache add vips-tools && mkdir -p /files/public /files/private /db
 COPY seed/files /files/
-COPY seed/db /db/
-
-FROM base AS dev
-ENV NODE_ENV=development
-CMD ["node", "--watch", "index.ts"]
 
 FROM base AS prod
 ENV NODE_ENV=production
-COPY package*.json .
-RUN npm ci --omit=dev
+COPY package*.json ./
+COPY prisma ./prisma/
+COPY prisma7.config.ts ./
+
+RUN npm ci && npx prisma generate
+
 COPY . .
-CMD ["node", "index.ts"]
+
+CMD ["node", "--experimental-strip-types", "index.ts"]
